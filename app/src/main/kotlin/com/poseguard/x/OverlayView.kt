@@ -47,6 +47,7 @@ class OverlayView(ctx: Context) : View(ctx) {
     @Volatile private var fps = 0
     @Volatile private var msg: String? = null
     @Volatile private var showMsg = false
+    private var lastDiag = 0L
 
     private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -151,6 +152,17 @@ class OverlayView(ctx: Context) : View(ctx) {
         }
 
         tracks = next
+        // 每 2 秒打一次几何，便于诊断框是否在屏幕内
+        if (next.isNotEmpty() && now - lastDiag > 2000) {
+            lastDiag = now
+            val t0 = next[0]
+            val sb = StringBuilder()
+            sb.append("帧 ${w}x${h} 屏幕 ${width}x${height} ")
+            sb.append("box=[${t0.box.left.toInt()},${t0.box.top.toInt()},")
+            sb.append("${t0.box.right.toInt()},${t0.box.bottom.toInt()}] ")
+            sb.append("kps=${t0.kps.size} 人数=${next.size}")
+            RunLog.i("Overlay", sb.toString())
+        }
         invalidate()
     }
 
@@ -168,17 +180,24 @@ class OverlayView(ctx: Context) : View(ctx) {
         invalidate()
     }
 
-    /** 单人与屏幕的最大整数倍缩放：画面完整可见 */
-    private fun fit(): Pair<Float, Float> {
-        if (srcW <= 0 || srcH <= 0) return 1f to 1f
-        val sx = width.toFloat() / srcW
-        val sy = height.toFloat() / srcH
-        return sx to sy
+    /**
+     * FILL_CENTER：画面铺满屏幕，超出部分裁掉，居中。
+     * 返回 (缩放比, 偏移X, 偏移Y)，绘制时 x*scale+offX。
+     */
+    private fun fit(): FloatArray {
+        if (srcW <= 0 || srcH <= 0) return floatArrayOf(1f, 0f, 0f)
+        val s = max(width.toFloat() / srcW, height.toFloat() / srcH)
+        val offX = (width - srcW * s) / 2f
+        val offY = (height - srcH * s) / 2f
+        return floatArrayOf(s, offX, offY)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val (sx, sy) = fit()
+        val f = fit()
+        val s = f[0]
+        val offX = f[1]
+        val offY = f[2]
         val list = tracks
         val now = System.currentTimeMillis()
 
@@ -189,8 +208,8 @@ class OverlayView(ctx: Context) : View(ctx) {
             val alpha = if (age > HOLD_MS) 0 else (255 - (age * 255 / HOLD_MS).toInt()).coerceIn(60, 255)
 
             val r = RectF(
-                t.box.left * sx, t.box.top * sy,
-                t.box.right * sx, t.box.bottom * sy
+                t.box.left * s + offX, t.box.top * s + offY,
+                t.box.right * s + offX, t.box.bottom * s + offY
             )
 
             // 框：细线 + 四角加粗
@@ -211,7 +230,8 @@ class OverlayView(ctx: Context) : View(ctx) {
                 if (t.conf[a] < Kps.THRESH || t.conf[c] < Kps.THRESH) continue
                 val pa = t.kps[a]
                 val pc = t.kps[c]
-                canvas.drawLine(pa.x * sx, pa.y * sy, pc.x * sx, pc.y * sy, bonePaint)
+                canvas.drawLine(pa.x * s + offX, pa.y * s + offY,
+                                pc.x * s + offX, pc.y * s + offY, bonePaint)
             }
 
             // 关节点
@@ -220,8 +240,10 @@ class OverlayView(ctx: Context) : View(ctx) {
             for (i in t.kps.indices) {
                 if (t.conf[i] < Kps.THRESH) continue
                 val k = t.kps[i]
-                canvas.drawCircle(k.x * sx, k.y * sy, 8f, haloPaint)
-                canvas.drawCircle(k.x * sx, k.y * sy, 5f, jointPaint)
+                val cx = k.x * s + offX
+                val cy = k.y * s + offY
+                canvas.drawCircle(cx, cy, 8f, haloPaint)
+                canvas.drawCircle(cx, cy, 5f, jointPaint)
             }
 
             // 左上角标签

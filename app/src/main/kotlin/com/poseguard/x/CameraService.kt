@@ -107,9 +107,11 @@ class CameraService : LifecycleService() {
                         if (det != null) {
                             val persons = det.detect(bmp)
                             count = persons.size
-                            overlay?.post {
-                                overlay?.submit(persons, fps, bmp.width, bmp.height)
-                            }
+                            // 尺寸必须在 recycle 之前取出来，否则闭包里读到的是已回收的 bitmap
+                            val fw = bmp.width
+                            val fh = bmp.height
+                            val curFps = fps
+                            overlay?.post { overlay?.submit(persons, curFps, fw, fh) }
                         }
                         bmp.recycle()
                     } catch (t: Throwable) {
