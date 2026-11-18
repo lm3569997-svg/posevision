@@ -45,7 +45,6 @@ class CameraActivity : AppCompatActivity() {
     private var engine: PoseEngine? = null
     private val providerRef = arrayOfNulls<ProcessCameraProvider>(1)
 
-    @Volatile private var busy = false
     private var usingFront = false
     private var frames = 0
     private var mark = 0L
@@ -120,42 +119,38 @@ class CameraActivity : AppCompatActivity() {
                 preview.setSurfaceProvider(previewView.surfaceProvider)
 
                 val analysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(android.util.Size(1280, 720))
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_BLOCK_PRODUCER)
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                     .setTargetRotation(Surface.ROTATION_0)
                     .build()
 
                 analysis.setAnalyzer(worker) { img ->
-                    frames++
-                    val now = System.currentTimeMillis()
-                    if (now - mark >= 1000) {
-                        val f = (frames * 1000 / (now - mark)).toInt()
-                        frames = 0
-                        mark = now
-                        overlay.setFps(f)
-                    }
-
-                    if (busy) {
-                        img.close()
-                        return@setAnalyzer
-                    }
-                    busy = true
                     try {
                         val det = engine ?: return@setAnalyzer
-                        val bmp = img.toUpright(usingFront)
+                        val bmp = img.toUpright(90, usingFront)
                         val persons = det.detect(bmp)
                         val w = bmp.width
                         val h = bmp.height
                         bmp.recycle()
+                        // 检测帧率按「推理完成时刻」统计，反映真实处理速度
+                        frames++
+                        val now2 = System.currentTimeMillis()
+                        if (now2 - mark >= 1000) {
+                            val f = (frames * 1000 / (now2 - mark)).toInt()
+                            frames = 0
+                            mark = now2
+                            overlay.setFps(f)
+                        }
+
                         runOnUiThread {
                             overlay.setData(persons, w, h)
-                            tvHud.text = "人数 ${persons.size}   FPS ${overlay.fps}"
+                            tvHud.text = "人数 ${persons.size}   检测 ${overlay.fps} fps"
                         }
                     } catch (t: Throwable) {
                         RunLog.e("Detect", "${t.javaClass.simpleName} ${t.message}")
                     } finally {
                         img.close()
-                        busy = false
                     }
                 }
 
