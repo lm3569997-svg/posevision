@@ -164,7 +164,7 @@ private const val IS_FRONT = false
 private const val UPRIGHT_DEGREES = 90
 
 /** YUV_420_888 → NV21 → JPEG → Bitmap，并转正到竖屏 */
-fun ImageProxy.toUpright(): Bitmap {
+fun ImageProxy.toUpright(mirror: Boolean = IS_FRONT): Bitmap {
     val y = planes[0]
     val u = planes[1]
     val v = planes[2]
@@ -182,7 +182,7 @@ fun ImageProxy.toUpright(): Bitmap {
 
     val m = Matrix().apply {
         postRotate(UPRIGHT_DEGREES.toFloat())
-        if (IS_FRONT) postScale(-1f, 1f)
+        if (mirror) postScale(-1f, 1f)
     }
     val fixed = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
     if (fixed !== raw) raw.recycle()

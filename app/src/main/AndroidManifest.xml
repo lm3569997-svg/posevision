@@ -28,6 +28,12 @@
         </activity>
 
         <activity
+            android:name=".CameraActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.PoseVision.Camera" />
+
+        <activity
             android:name=".LogActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

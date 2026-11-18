@@ -43,19 +43,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnStart).setOnClickListener {
-            startService()
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                RunLog.w("Main", "相机未授权，先申请")
+                requestPerms()
+                return@setOnClickListener
+            }
+            RunLog.i("Main", "打开 App 内相机")
+            startActivity(Intent(this, CameraActivity::class.java))
         }
 
-        findViewById<Button>(R.id.btnStop).setOnClickListener {
-            stopService(Intent(this, CameraService::class.java))
-            RunLog.i("Main", "请求停止服务")
-            tvStatus.postDelayed({ refresh() }, 400)
+        findViewById<Button>(R.id.btnStop).apply {
+            text = "后台悬浮模式（长按开启）"
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, CameraService::class.java))
+                RunLog.i("Main", "停止后台悬浮服务")
+                tvStatus.postDelayed({ refresh() }, 400)
+            }
+            setOnLongClickListener {
+                startOverlayService()
+                true
+            }
         }
 
         refresh()
     }
 
-    private fun startService() {
+    private fun startOverlayService() {
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(this, "请先允许「显示在其他应用上层」", Toast.LENGTH_LONG).show()
             RunLog.w("Main", "悬浮窗未授权，跳转设置")
